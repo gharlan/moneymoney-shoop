@@ -30,7 +30,7 @@
 --
 
 WebBanking {
-    version     = 1.00,
+    version     = 1.01,
     country     = "de",
     url         = "https://www.shoop.de",
     services    = {"Shoop"},
@@ -110,7 +110,6 @@ local function parseCSV (csv, row)
 end
 
 local connection
-local myPage
 
 function SupportsBank (protocol, bankCode)
     return bankCode == "Shoop" and protocol == ProtocolWebBanking
@@ -120,18 +119,17 @@ function InitializeSession (protocol, bankCode, username, username2, password, u
     connection = Connection()
     connection.language = "de-de"
 
-    local response = HTML(connection:get(url))
-    response:xpath("//input[@name='username']"):attr("value", username)
-    response:xpath("//input[@name='password']"):attr("value", password)
-
-    response = HTML(connection:request(response:xpath("//button[@id='login_email']"):click()))
-    if response:xpath("//[@id='loginmodal']/[@class='guide_warn']"):length() > 0 then
-        print("Response: " .. response:xpath("//[@id='loginmodal']/[@class='guide_warn']"):text())
+    local response = HTML(connection:post(
+        url .. '/login.php',
+        'username=' .. username .. '&password=' .. password,
+        'application/x-www-form-urlencoded',
+        { Cookie = 'last_seen[first]=2016-01-01+00%3A00%3A00; last_seen[last]=16-01-01+00%3A00%3A00' }
+    ))
+    if string.match(connection:getBaseURL(), 'login_error') then
         return LoginFailed
     end
 
     print("Login successful.")
-    myPage = response
 end
 
 function ListAccounts (knownAccounts)
@@ -154,8 +152,10 @@ function ListAccounts (knownAccounts)
 end
 
 function RefreshAccount (account, since)
-    local balance = strToNumber(myPage:xpath("//div[@class='user-account-stat']/p[@class='amount payed']"):text())
-    local pendingBalance = strToNumber(myPage:xpath("//div[@class='user-account-stat']/p[@class='amount open']"):text())
+    local response = HTML(connection:get(url .. '/my/'))
+
+    local balance = strToNumber(response:xpath("//div[@class='user-account-stat']/p[@class='amount payed']"):text())
+    local pendingBalance = strToNumber(response:xpath("//div[@class='user-account-stat']/p[@class='amount open']"):text())
 
     local transactions = {}
 
@@ -175,7 +175,7 @@ function RefreshAccount (account, since)
         end
     end)
 
-    local response = HTML(connection:get("https://www.shoop.de/my/payments.php"))
+    response = HTML(connection:get("https://www.shoop.de/my/payments.php"))
 
     response:xpath("//table[@id='balance_table']/tbody/tr[@class='type_withdraw ']"):each(function (index, row)
         local date = strToDate2(row:xpath("td[1]/div"):text())
@@ -200,7 +200,7 @@ function RefreshAccount (account, since)
 end
 
 function EndSession ()
-    connection:get("https://www.shoop.de/login.php?logout")
+    connection:get("https://www.shoop.de/logout.php")
 
     print("Logout successful.")
 end
