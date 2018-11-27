@@ -30,19 +30,12 @@
 --
 
 WebBanking {
-    version     = 1.01,
+    version     = 1.02,
     country     = "de",
     url         = "https://www.shoop.de",
     services    = {"Shoop"},
     description = string.format(MM.localizeText("Get balance and transactions for %s"), "Shoop")
 }
-
-local function strToNumber(str)
-    str = string.gsub(str, "€", "")
-    str = string.gsub(str, "[^,%d]", "")
-    str = string.gsub(str, ",", ".")
-    return tonumber(str)
-end
 
 local function strToDate(str)
     local y, m, d = string.match(str, "(%d%d%d%d)-(%d%d)-(%d%d)")
@@ -51,65 +44,9 @@ local function strToDate(str)
     end
 end
 
-local function strToDate2(str)
-    local y, m, d = string.match(str, "(%d%d)(%d%d)(%d%d)")
-    if d and m and y then
-        return os.time { year = 2000 + y, month = m, day = d, hour = 0, min = 0, sec = 0 }
-    end
-end
-
-local function parseCSV (csv, row)
-    csv = csv .. "\n"
-    local len    = string.len(csv)
-    local cols   = {}
-    local field  = ""
-    local quoted = false
-    local start  = false
-
-    local i = 1
-    while i <= len do
-        local c = string.sub(csv, i, i)
-        if quoted then
-            if c == '"' then
-                if i + 1 <= len and string.sub(csv, i + 1, i + 1) == '"' then
-                    -- Escaped quotation mark.
-                    field = field .. c
-                    i = i + 1
-                else
-                    -- End of quotaton.
-                    quoted = false
-                end
-            else
-                field = field .. c
-            end
-        else
-            if start and c == '"' then
-                -- Begin of quotation.
-                quoted = true
-            elseif c == ";" then
-                -- Field separator.
-                table.insert(cols, field)
-                field  = ""
-                start  = true
-            elseif c == "\r" then
-                -- Ignore carriage return.
-            elseif c == "\n" then
-                -- New line. Call callback function.
-                table.insert(cols, field)
-                row(cols)
-                cols   = {}
-                field  = ""
-                quoted = false
-                start  = true
-            else
-                field = field .. c
-            end
-        end
-        i = i + 1
-    end
-end
-
+local api = "https://api.shoop.de/api"
 local connection
+local token
 
 function SupportsBank (protocol, bankCode)
     return bankCode == "Shoop" and protocol == ProtocolWebBanking
@@ -119,32 +56,35 @@ function InitializeSession (protocol, bankCode, username, username2, password, u
     connection = Connection()
     connection.language = "de-de"
 
-    local response = HTML(connection:post(
-        url .. '/login.php',
-        'username=' .. username .. '&password=' .. password,
-        'application/x-www-form-urlencoded',
-        { Cookie = 'last_seen[first]=2016-01-01+00%3A00%3A00; last_seen[last]=16-01-01+00%3A00%3A00' }
-    ))
-    if string.match(connection:getBaseURL(), 'login_error') then
+    local response = JSON(connection:post(
+        api .. '/auth/',
+        '{"username":"' .. username .. '","password":"' .. password .. '"}',
+        'application/json',
+        { Accept = 'application/json' }
+    )):dictionary()
+
+    if response.result ~= "success" then
         return LoginFailed
     end
+
+    token = response.message.token
 
     print("Login successful.")
 end
 
 function ListAccounts (knownAccounts)
-    local response = HTML(connection:get("https://www.shoop.de/my/settings.php"))
-
-    local username = response:xpath("//span[@class='username']"):text()
-    local owner = response:xpath("//input[@id='name']"):val()
-    if not owner or #owner == 0 then
-        owner = username
-    end
+    local response = JSON(connection:request(
+        'GET',
+        api .. '/user/',
+        '',
+        'application/json',
+        { Accept = 'application/json', token = token }
+    )):dictionary()
 
     local account = {
         name = "Shoop",
-        owner = owner,
-        accountNumber = username,
+        owner = response.message.name,
+        accountNumber = response.message.username,
         currency = "EUR",
         type = AccountTypeUnknown
     }
@@ -152,45 +92,66 @@ function ListAccounts (knownAccounts)
 end
 
 function RefreshAccount (account, since)
-    local response = HTML(connection:get(url .. '/my/'))
+    local response = JSON(connection:request(
+        'GET',
+        api .. '/user/',
+        '',
+        'application/json',
+        { Accept = 'application/json', token = token }
+    )):dictionary()
 
-    local balance = strToNumber(response:xpath("//div[@class='user-account-stat']/p[@class='amount payed']"):text())
-    local pendingBalance = strToNumber(response:xpath("//div[@class='user-account-stat']/p[@class='amount open']"):text())
+    local balance = response.message.transactions.recieved
+    local pendingBalance = response.message.transactions.pending
 
     local transactions = {}
 
-    local csv = connection:get("https://www.shoop.de/my/transactions.php?csv=true")
+    local response = JSON(connection:request(
+        'GET',
+        api .. '/user/transactions/?from=2014-01-01T00:00:00.000Z',
+        '',
+        'application/json',
+        { Accept = 'application/json', token = token }
+    )):dictionary()
 
-    parseCSV(csv, function (fields)
-        if #fields > 10 and fields[4] ~= "abgelehnt" and strToDate(fields[8]) ~= nil and strToDate(fields[8]) >= since then
+    for i, row in ipairs(response.message) do
+        if row.status ~= "blocked" then
             local transaction = {
-                bookingDate = strToDate(fields[8]),
-                valueDate   = strToDate(fields[11]),
-                name        = fields[2],
-                amount      = strToNumber(fields[5]),
+                bookingDate = strToDate(row.tracked),
+                valueDate   = strToDate(row.tracked),
+                name        = row.merchant.name,
+                amount      = row.cashback,
                 currency    = "EUR",
-                booked      = fields[4] == "verfügbar" or fields[4] == "bezahlt"
+                booked      = row.status == "received" or row.status == "paid",
+                purpose     = row.notes
             }
             table.insert(transactions, transaction)
         end
-    end)
+    end
 
-    response = HTML(connection:get("https://www.shoop.de/my/payments.php"))
+    local response = JSON(connection:request(
+        'GET',
+        api .. '/user/payouts/?from=2014-01-01T00:00:00.000Z',
+        '',
+        'application/json',
+        { Accept = 'application/json', token = token }
+    )):dictionary()
 
-    response:xpath("//table[@id='balance_table']/tbody/tr[@class='type_withdraw ']"):each(function (index, row)
-        local date = strToDate2(row:xpath("td[1]/div"):text())
-        if date >= since then
-            local transaction = {
-                bookingDate = date,
-                name        = "Auszahlung",
-                purpose     = row:xpath("td[3]"):text(),
-                amount      = tonumber(row:xpath("td[2]"):attr("data-amount")) / 100,
-                currency    = "EUR",
-                booked      = true
-            }
-            table.insert(transactions, transaction)
+    for i, month in ipairs(response.message) do
+        for i, row in ipairs(month.payments) do
+            if row.status ~= "blocked" then
+                local transaction = {
+                    bookingDate = strToDate(row.date),
+                    valueDate   = strToDate(row.started),
+                    name        = "Auszahlung",
+                    amount      = -row.amount,
+                    currency    = "EUR",
+                    booked      = true,
+                    purpose     = row.method
+                }
+                table.insert(transactions, transaction)
+            end
         end
-    end)
+    end
 
     return {
         balance = balance,
@@ -200,7 +161,13 @@ function RefreshAccount (account, since)
 end
 
 function EndSession ()
-    connection:get("https://www.shoop.de/logout.php")
+    connection:request(
+        'DELETE',
+        api .. '/auth/',
+        '',
+        'application/json',
+        { Accept = 'application/json', token = token }
+    )
 
     print("Logout successful.")
 end
