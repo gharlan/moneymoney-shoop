@@ -114,7 +114,7 @@ function RefreshAccount (account, since)
     )):dictionary()
 
     for i, row in ipairs(response.message) do
-        if row.status ~= "blocked" then
+        if row.status ~= "blocked" and row.status ~= "reminder" then
             local transaction = {
                 bookingDate = strToDate(row.tracked),
                 valueDate   = strToDate(row.tracked),
