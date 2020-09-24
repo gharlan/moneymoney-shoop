@@ -30,7 +30,7 @@
 --
 
 WebBanking {
-    version     = 1.03,
+    version     = 1.04,
     country     = "de",
     url         = "https://www.shoop.de",
     services    = {"Shoop"},
@@ -107,21 +107,22 @@ function RefreshAccount (account, since)
 
     local response = JSON(connection:request(
         'GET',
-        api .. '/user/transactions/?from=2014-01-01T00:00:00.000Z',
+        api .. '/user/activity/transactions/?from=2014-01-01T00:00:00.000Z&limit=1000',
         '',
         'application/json',
         { Accept = 'application/json', token = token }
     )):dictionary()
 
-    for i, row in ipairs(response.message) do
-        if row.status ~= "blocked" and row.status ~= "reminder" then
+    for i, row in ipairs(response.message.data) do
+        row = row.transaction
+        if row.status.type ~= "blocked" and row.status.type ~= "reminder" then
             local transaction = {
-                bookingDate = strToDate(row.tracked),
-                valueDate   = strToDate(row.tracked),
-                name        = row.merchant.name,
+                bookingDate = strToDate(row.trackedDate),
+                valueDate   = strToDate(row.trackedDate),
+                name        = row.merchantName,
                 amount      = row.cashback,
                 currency    = "EUR",
-                booked      = row.status == "received" or row.status == "paid",
+                booked      = row.status.type == "received" or row.status.type == "paid",
                 purpose     = row.notes
             }
             table.insert(transactions, transaction)
@@ -130,26 +131,24 @@ function RefreshAccount (account, since)
 
     local response = JSON(connection:request(
         'GET',
-        api .. '/user/payouts/?from=2014-01-01T00:00:00.000Z',
+        api .. '/user/activity/payouts/?from=2014-01-01T00:00:00.000Z&limit=1000',
         '',
         'application/json',
         { Accept = 'application/json', token = token }
     )):dictionary()
 
-    for i, month in ipairs(response.message) do
-        for i, row in ipairs(month.payments) do
-            if row.status ~= "blocked" then
-                local transaction = {
-                    bookingDate = strToDate(row.date),
-                    valueDate   = strToDate(row.started),
-                    name        = "Auszahlung",
-                    amount      = -row.amount,
-                    currency    = "EUR",
-                    booked      = true,
-                    purpose     = row.method
-                }
-                table.insert(transactions, transaction)
-            end
+    for i, row in ipairs(response.message.data) do
+        if row.status ~= "blocked" then
+            local transaction = {
+                bookingDate = strToDate(row.date),
+                valueDate   = strToDate(row.date),
+                name        = "Auszahlung",
+                amount      = -row.amount,
+                currency    = "EUR",
+                booked      = true,
+                purpose     = row.methodLabel
+            }
+            table.insert(transactions, transaction)
         end
     end
 
