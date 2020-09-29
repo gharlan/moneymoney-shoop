@@ -30,7 +30,7 @@
 --
 
 WebBanking {
-    version     = 1.04,
+    version     = 1.05,
     country     = "de",
     url         = "https://www.shoop.de",
     services    = {"Shoop"},
@@ -114,7 +114,14 @@ function RefreshAccount (account, since)
     )):dictionary()
 
     for i, row in ipairs(response.message.data) do
-        row = row.transaction
+        if row.type == "bonus" then
+            row = row.bonus
+        elseif row.type == "transaction" then
+            row = row.transaction
+        else
+            print("Unknown type " .. row.type)
+        end
+
         if row.status.type ~= "blocked" and row.status.type ~= "reminder" then
             local transaction = {
                 bookingDate = strToDate(row.trackedDate),
