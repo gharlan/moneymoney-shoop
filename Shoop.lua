@@ -146,11 +146,15 @@ function RefreshAccount (account, since)
 
     for i, row in ipairs(response.message.data) do
         if row.status ~= "blocked" then
+            local paidCashback = 0
+            for ti, value in pairs(row.transactions) do
+                paidCashback = paidCashback + value.paidCashback
+            end
             local transaction = {
                 bookingDate = strToDate(row.date),
                 valueDate   = strToDate(row.date),
                 name        = "Auszahlung",
-                amount      = -row.amount,
+                amount      = -paidCashback,
                 currency    = "EUR",
                 booked      = true,
                 purpose     = row.methodLabel
