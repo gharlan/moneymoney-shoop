@@ -30,7 +30,7 @@
 --
 
 WebBanking {
-    version     = 1.05,
+    version     = 1.06,
     country     = "de",
     url         = "https://www.shoop.de",
     services    = {"Shoop"},
@@ -100,7 +100,7 @@ function RefreshAccount (account, since)
         { Accept = 'application/json', token = token }
     )):dictionary()
 
-    local balance = response.message.transactions.recieved
+    local balance = response.message.transactions.received
     local pendingBalance = response.message.transactions.pending
 
     local transactions = {}
