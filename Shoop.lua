@@ -30,7 +30,7 @@
 --
 
 WebBanking {
-    version     = 1.06,
+    version     = 1.07,
     country     = "de",
     url         = "https://www.shoop.de",
     services    = {"Shoop"},
@@ -57,7 +57,7 @@ function InitializeSession (protocol, bankCode, username, username2, password, u
     connection.language = "de-de"
 
     local response = JSON(connection:post(
-        api .. '/auth/',
+        api .. '/auth',
         '{"username":"' .. username .. '","password":"' .. password .. '"}',
         'application/json',
         { Accept = 'application/json' }
@@ -75,7 +75,7 @@ end
 function ListAccounts (knownAccounts)
     local response = JSON(connection:request(
         'GET',
-        api .. '/user/',
+        api .. '/user',
         '',
         'application/json',
         { Accept = 'application/json', token = token }
@@ -94,7 +94,7 @@ end
 function RefreshAccount (account, since)
     local response = JSON(connection:request(
         'GET',
-        api .. '/user/',
+        api .. '/user',
         '',
         'application/json',
         { Accept = 'application/json', token = token }
@@ -107,7 +107,7 @@ function RefreshAccount (account, since)
 
     local response = JSON(connection:request(
         'GET',
-        api .. '/user/activity/transactions/?from=2014-01-01T00:00:00.000Z&limit=1000',
+        api .. '/user/activity/transactions?from=2014-01-01T00:00:00.000Z&limit=1000',
         '',
         'application/json',
         { Accept = 'application/json', token = token }
@@ -138,7 +138,7 @@ function RefreshAccount (account, since)
 
     local response = JSON(connection:request(
         'GET',
-        api .. '/user/activity/payouts/?from=2014-01-01T00:00:00.000Z&limit=1000',
+        api .. '/user/activity/payouts?from=2014-01-01T00:00:00.000Z&limit=1000',
         '',
         'application/json',
         { Accept = 'application/json', token = token }
@@ -169,7 +169,7 @@ end
 function EndSession ()
     connection:request(
         'DELETE',
-        api .. '/auth/',
+        api .. '/auth',
         '',
         'application/json',
         { Accept = 'application/json', token = token }
