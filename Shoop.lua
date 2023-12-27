@@ -30,7 +30,7 @@
 --
 
 WebBanking {
-    version     = 1.07,
+    version     = 1.08,
     country     = "de",
     url         = "https://www.shoop.de",
     services    = {"Shoop"},
