@@ -118,6 +118,8 @@ function RefreshAccount (account, since)
             row = row.bonus
         elseif row.type == "transaction" then
             row = row.transaction
+        elseif row.type == "friendRafBonus" then
+            row = row.friendRafBonus
         else
             print("Unknown type " .. row.type)
         end
